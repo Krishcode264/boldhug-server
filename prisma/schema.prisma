@@ -1,0 +1,205 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum ApproveStatus {
+  pending
+  approved
+  rejected
+}
+
+enum AuthProvider {
+  credential
+  google
+  facebook
+  phoneNumber
+}
+
+enum AttachmentMediaType {
+  image
+  video
+  file
+}
+
+enum ParentType {
+  message
+  event_post
+  profile_photo
+}
+
+enum ConvoType {
+  group
+  private
+}
+
+enum WhoCanMessage {
+  friends
+  anyone
+  none
+  contacts
+}
+
+model User {
+  id               String             @id @default(uuid()) @db.Uuid
+  userName         String
+  email            String?            @unique
+  salt             String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  role             UserRole           @default(user)
+  mobileNo         String?            @unique
+  profilePhoto     Attachment?        @relation(fields: [profilePhotoId], references: [id])
+  profilePhotoId   String?            @unique @db.Uuid
+  authProvider     AuthProvider
+  Event            Event[]
+  EventAdmin       EventAdmin[]
+  ConvoParticipant ConvoParticipant[]
+  Setting          Setting?
+
+  EventParticipant EventParticipant[]
+
+  Message Message[]
+
+  Comment Comment[]
+}
+
+model Event {
+  id            String             @id @default(uuid()) @db.Uuid
+  createdBy     String             @db.Uuid
+  title         String
+  description   String
+  slots         Int
+  reservedSlots Int?
+  location      String?
+  coords        String?
+  date          DateTime
+  eventTime     DateTime
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  creator       User               @relation(fields: [createdBy], references: [id])
+  eventAdmins   EventAdmin[]
+  participants  EventParticipant[]
+  eventPosts    EventPost[]
+  convo         Convo?             @relation(fields: [convoId], references: [id])
+  convoId       String?            @unique @db.Uuid
+}
+
+model EventAdmin {
+  eventId String @db.Uuid
+  userId  String  @db.Uuid
+  event   Event  @relation(fields: [eventId], references: [id])
+  user    User   @relation(fields: [userId], references: [id])
+
+  @@id([eventId, userId])
+}
+
+model EventParticipant {
+  userId          String  @db.Uuid
+  eventId         String   @db.Uuid
+  approveStatus   ApproveStatus
+  statusUpdatedAt DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id])
+  event           Event         @relation(fields: [eventId], references: [id])
+
+  @@id([userId, eventId])
+}
+
+model Message {
+  id         String       @id @default(uuid()) @db.Uuid
+  content    String
+  senderId   String       @db.Uuid
+  convoId    String       @db.Uuid
+  repliedTo  String?      @db.Uuid
+  readStatus Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  sender     User         @relation(fields: [senderId], references: [id])
+  convo      Convo        @relation(fields: [convoId], references: [id])
+  replyTo    Message?     @relation("MessageThread", fields: [repliedTo], references: [id])
+  attachment Attachment[]
+  replies    Message[]    @relation("MessageThread")
+}
+
+model Attachment {
+  id         String              @id @default(uuid()) @db.Uuid
+  type       AttachmentMediaType
+  url        String
+  format     String
+  fileSize   BigInt
+  key        String
+  parentType ParentType
+  order      Int
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  Message    Message?            @relation(fields: [messageId], references: [id])
+  messageId  String?             @db.Uuid
+  Event      EventPost?          @relation(fields: [eventId], references: [id])
+  eventId    String?             @db.Uuid
+  User       User?               @relation()
+  userId     String?             @unique
+}
+
+model EventPost {
+  id         String       @id @default(uuid()) @db.Uuid
+  title      String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  likes      Int          @default(0)
+  comments   Comment[]
+  Event      Event?       @relation(fields: [eventId], references: [id])
+  eventId    String?    @db.Uuid
+  attachment Attachment[]
+}
+
+model Comment {
+  id          String    @id @default(uuid()) @db.Uuid
+  content     String
+  eventPostId String   @db.Uuid
+  createdAt   DateTime  @default(now())
+  userId      String    @db.Uuid
+  eventPost   EventPost @relation(fields: [eventPostId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+model Convo {
+  id           String             @id @default(uuid()) @db.Uuid
+  memberCount  Int?
+  key          String             @unique
+  eventId      String?            @db.Uuid
+  createdAt    DateTime           @default(now())
+  convoType    ConvoType
+  Event        Event?             @relation()
+  Message      Message[]
+  participants ConvoParticipant[]
+}
+
+model ConvoParticipant {
+  convoId  String   @db.Uuid
+  userId   String   @db.Uuid
+  joinedAt DateTime @default(now())
+
+  convo Convo @relation(fields: [convoId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@id([convoId, userId])
+}
+
+model Setting {
+  userId             String        @id @db.Uuid
+  inAppNotification  Boolean       @default(true)
+  emailNotifications Boolean       @default(true)
+  whoCanMessage      WhoCanMessage @default(anyone)
+
+  user User @relation(fields: [userId], references: [id])
+}
