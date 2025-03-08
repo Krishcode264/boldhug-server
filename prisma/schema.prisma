@@ -20,7 +20,7 @@ enum ApproveStatus {
 }
 
 enum AuthProvider {
-  credential
+  email
   google
   facebook
   phoneNumber
@@ -52,25 +52,20 @@ enum WhoCanMessage {
 
 model User {
   id               String             @id @default(uuid()) @db.Uuid
-  userName         String
+  userName         String?
   email            String?            @unique
-  salt             String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   role             UserRole           @default(user)
   mobileNo         String?            @unique
   profilePhoto     Attachment?        @relation(fields: [profilePhotoId], references: [id])
   profilePhotoId   String?            @unique @db.Uuid
-  authProvider     AuthProvider
   Event            Event[]
   EventAdmin       EventAdmin[]
   ConvoParticipant ConvoParticipant[]
   Setting          Setting?
-
   EventParticipant EventParticipant[]
-
   Message Message[]
-
   Comment Comment[]
 }
 

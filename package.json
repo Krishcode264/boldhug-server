@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "src/app.ts",
   "scripts": {
-    "dev": "nodemon ",
+    "dev": " npm run prestart && nodemon ",
+    "prestart": "npx kill-port 8080",
     "tsc": "tsc",
     "prod": "tsc && node build/app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -22,6 +23,7 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^6.10.0",
     "nodemon": "^3.1.9",
+    "prisma": "^6.4.1",
     "ts-node": "^10.9.2",
     "twilio": "^5.4.5",
     "typescript": "^5.8.2",

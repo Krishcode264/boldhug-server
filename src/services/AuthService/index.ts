@@ -5,183 +5,173 @@ import { MailService } from "../MailService";
 import { SMSService } from "../SMSService";
 import { optional } from "zod";
 import { errReturn } from "../../util/helper";
-import { OtpEntry } from "../../types/types";
+import { BLRT, OtpEntry } from "../../types/types";
 import { UserService } from "../UserService";
 import jwt from "jsonwebtoken";
 import { JwtPayload } from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import { z } from "zod";
+import {
+  AutherizationError,
+  BadRequestError,
+  BaseError,
+  ConflictError,
+  InternalServerError,
+} from "../../util/errors";
+
 export class AuthService {
-  static async signup(signupPayload: {
-    identifier: string;
-    password?: string;
-    userName: string;
-    authProvider: "credential" | "phoneNumber";
-  }) {
-    try {
-      const optEntry = await getCache<OtpEntry | null>(
-        signupPayload.identifier
+
+  static async signup(identifier: string) {
+    const optEntry = await getCache<OtpEntry | null>(identifier);
+    const alreadyExistedUser = await prisma.user.findFirst({
+      where: {
+        OR: [{ email: identifier }, { mobileNo: identifier }],
+      },
+    });
+
+    if (!optEntry || !optEntry.isVarified) {
+      throw new BadRequestError(
+        "OPT is not verified try again",
+        "OTP_NOT_VERIFIED"
       );
-      const alreadyExistedUser = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { email: signupPayload.identifier },
-            { mobileNo: signupPayload.identifier },
-          ],
-        },
-      });
-      if (alreadyExistedUser) {
-        return {
-          success: false,
-          error: "User with Email/MobileNumber  alredy exists , try login",
-        };
-      }
-
-      if (optEntry && optEntry.isVarified) {
-        if (signupPayload.authProvider === "credential") {
-          const hashedPassword = await bcrypt.hash(signupPayload.password!, 10);
-          const newuser = await prisma.user.create({
-            data: {
-              email: signupPayload.identifier,
-              userName: signupPayload.userName,
-              salt: hashedPassword,
-              authProvider: "credential",
-            },
-            select: {
-              id: true,
-              email: true,
-              userName: true,
-              authProvider: true,
-              role: true,
-            },
-          });
-          const accessToken = this.createJwtToken({
-            id: newuser.id,
-            email: newuser.email,
-            authprovider: newuser.authProvider,
-            role: newuser.role,
-          });
-          const refreshToken = this.createrefreshToken({
-            id: newuser.id,
-            role: newuser.role,
-          });
-
-          return {
-            data: { accessToken, refreshToken, user: newuser },
-            success: true,
-          };
-        }
-        if (signupPayload.authProvider === "phoneNumber") {
-          const newuser = await prisma.user.create({
-            data: {
-              mobileNo: signupPayload.identifier,
-              userName: signupPayload.userName,
-              authProvider: "phoneNumber",
-            },
-            select: {
-              id: true,
-              mobileNo: true,
-              userName: true,
-              authProvider: true,
-              role: true,
-            },
-          });
-          const accessToken = this.createJwtToken({
-            id: newuser.id,
-            authprovider: newuser.authProvider,
-            role: newuser.role,
-          });
-          const refreshToken = this.createrefreshToken({
-            id: newuser.id,
-            role: newuser.role,
-            authProvider: newuser.authProvider,
-          });
-
-          return {
-            data: { user: newuser, accessToken, refreshToken },
-            success: true,
-          };
-        }
-      }
-      return {
-        success: false,
-        error:
-          "Email/mobile number is not verified , need to verify it before ",
-      };
-    } catch (err) {
-      console.log("error signing up ", err);
-      return { success: false, error: errReturn(err, "error signing up") };
     }
+
+    if (alreadyExistedUser) {
+      const accessToken = this.createJwtToken({
+        id: alreadyExistedUser.id,
+        role: alreadyExistedUser.role,
+      });
+      const refreshToken = this.createrefreshToken({
+        id: alreadyExistedUser.id,
+        role: alreadyExistedUser.role,
+      });
+      return { user:{...alreadyExistedUser,isExistingUser:true}, accessToken, refreshToken };
+    }
+
+    const isEmail = z.string().email().safeParse(identifier);
+    const isPhoneNumber = z
+      .number()
+      .min(12)
+      .safeParse(Number(identifier.split("+")[1]));
+    console.log(
+      isEmail,
+      isPhoneNumber,
+      "at the zod schema for email phone number "
+    );
+
+    const newuser = await UserService.createUser(
+      identifier,
+      isEmail.success ? "email" : "mobileNo"
+    );
+    const accessToken = this.createJwtToken({
+      id: newuser.id,
+      role: newuser.role,
+    });
+    const refreshToken = this.createrefreshToken({
+      id: newuser.id,
+      role: newuser.role,
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      user: newuser,
+    };
+  }
+
+  static async login(identifier: string) {
+    const isVerified = await getCache<OtpEntry>(identifier);
+
+    if (!isVerified||!isVerified?.isVarified) {
+      throw new BadRequestError(
+        "OTP need to be varified first",
+        "OTP_VERIFICATION_NEEDED"
+      );
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { OR:[{mobileNo: identifier},{ email: identifier}]  },
+    });
+
+    if (!user) {
+      throw new BadRequestError(
+        "user with Mobile Number does not exist",
+        "USER_DOESNT_EXIST"
+      );
+    }
+    const accessToken = this.createJwtToken({
+      id: user.id,
+      role: user.role,
+    });
+    const refreshToken = this.createrefreshToken({
+      id: user.id,
+      role: user.role,
+    });
+    return {user,refreshToken,accessToken};
   }
 
   static async generateOTP(
     identifier: string,
-    provider: "credential" | "phoneNumber"
+    provider: "email" | "phoneNumber"
   ) {
-    try {
-      const otp = await getCache<OtpEntry>(identifier);
+    const otp = await getCache<OtpEntry>(identifier);
 
-      if (!otp.otp) {
-        const OTP = Math.floor(Math.random() * 1000000); //6 digit
-        await redis.set(
-          identifier,
-          JSON.stringify({ otp: OTP, isVerified: false }),
-          "EX",
-          330
-        );
-      }
-      let latestOtp = await getCache<OtpEntry | null>(identifier);
-      if (latestOtp) {
-        if (provider === "credential") {
-          await MailService.sendEmail(
-            identifier,
-            `your password for Auth is ${latestOtp.otp}`,
-            `Your one time password is ${latestOtp.otp} , it will be valid for 5 min  😊😘 `
-          );
-          return { success: true };
-        }
-        if (provider === "phoneNumber") {
-          await SMSService.sendSms(
-            identifier,
-            `your one time password is ${latestOtp.otp} , it will be valid for 5 min 😊💕😘`
-          );
-          return { success: true };
-        }
-      }
-
-      return {
-        success: false,
-        error: "Latest OTP was not found in REDIS try again  ",
-      };
-    } catch (err) {
-      console.log("error generating OTP ", err);
-      return {
-        success: false,
-        error: errReturn(err, "Error while Generating OTP"),
-      };
+    if (!otp) {
+      const OTP = Math.floor(Math.random() * 1000000); //6 digit
+      await redis.set(
+        identifier,
+        JSON.stringify({ otp: OTP, isVerified: false }),
+        "EX",
+        330
+      );
     }
+    let latestOtp = await getCache<OtpEntry | null>(identifier);
+
+    if (!latestOtp) {
+      throw new InternalServerError(
+        "otp has not generated ",
+        "OTP_GENERATION_ERROR"
+      );
+    }
+
+    if (provider === "email") {
+      await MailService.sendEmail(
+        identifier,
+        `your password for Auth is ${latestOtp.otp}`,
+        `Your one time password is ${latestOtp.otp} , it will be valid for 5 min  😊😘 `
+      );
+      return true;
+    }
+    if (provider === "phoneNumber") {
+      await SMSService.sendSms(
+        identifier,
+        `your one time password is ${latestOtp.otp} , it will be valid for 5 min 😊💕😘`
+      );
+      return true;
+    }
+    throw new ConflictError(
+      "auth provider doesnt match",
+      "AUTHPROVIDER_MISMATCH"
+    );
   }
 
   static async verifyOtp(otp: number, identifier: string) {
-    try {
-      const otpentry = await getCache<OtpEntry | null>(identifier);
-      if (otpentry && otpentry.otp === otp) {
-        otpentry.isVarified = true;
-        await redis.set(identifier, JSON.stringify(otpentry), "KEEPTTL");
-        return { success: true };
-      }
-      return { success: false, error: "Incorrect OTP  " };
-    } catch (err) {
-      console.log("error verifying  OTP ", err);
-      return {
-        success: false,
-        error: errReturn(err, "issue at OTP verification"),
-      };
+    const otpentry = await getCache<OtpEntry | null>(identifier);
+
+    if (!otpentry || otpentry.otp !== otp) {
+      throw new ConflictError(
+        "OTP isnt correct or havent generated before",
+        "OTP MISMATCH"
+      );
     }
+    otpentry.isVarified = true;
+    await redis.set(identifier, JSON.stringify(otpentry), "KEEPTTL");
+    return true;
   }
 
   static createJwtToken(data: any) {
     return jwt.sign(data, process.env.JWT_SECRET as string, {
-      expiresIn: "15m",
+      expiresIn: "15d",
     });
   }
 
@@ -192,43 +182,43 @@ export class AuthService {
   }
 
   static refreshToken(refreshtoken: string) {
-    try {
-      const payload = jwt.verify(
-        refreshtoken,
-        process.env.REFRESH_TOKEN as string
-      ) as JwtPayload;
-
-      const accessToken = this.createJwtToken({
-        id: payload.id,
-        role: payload.role,
-        authProvider:payload.authProvider
-      });
-      const refreshToken = this.createrefreshToken({
-        id: payload.id,
-        role: payload.role,
-        authProvider:payload.authProvider
-      });
-
-      if (accessToken&& refreshToken) {
-        return {
-          accessToken,
-          refreshToken,
-          success: true,
-        };
-      }
-      return { success: false, error: "access token cant be generated " };
-    } catch (err) {
-      console.log("error refreshsing token ");
-      return { success: false, error: "error refreshing the token " };
+    const payload = jwt.verify(
+      refreshtoken,
+      process.env.REFRESH_TOKEN as string
+    ) as JwtPayload;
+    if (!payload) {
+      throw new BadRequestError(
+        "refresh token expired need to login again",
+        "EXPIRED_RESFRESH_TOKEN"
+      );
     }
+
+    const accessToken = this.createJwtToken({
+      id: payload.id,
+      role: payload.role,
+      authProvider: payload.authProvider,
+    });
+    const refreshToken = this.createrefreshToken({
+      id: payload.id,
+      role: payload.role,
+      authProvider: payload.authProvider,
+    });
+
+    if (accessToken && refreshToken) {
+      return {
+        accessToken,
+        refreshToken,
+      };
+    }
+
+    return new BadRequestError(
+      "access token cant be generated,login ",
+      "ACCESS_TOKEN_GENERATION_ERROR"
+    );
   }
 
   static verifyJwtToken(token: string) {
-    try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET as string);
-      return payload;
-    } catch (err) {
-      return null;
-    }
+    const payload = jwt.verify(token, process.env.JWT_SECRET as string);
+    return payload;
   }
 }

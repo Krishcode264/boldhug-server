@@ -1,6 +1,8 @@
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import { errReturn } from "../../util/helper";
+import { BLRT } from "../../types/types";
+import { InternalServerError } from "../../util/errors";
 dotenv.config();
 export class MailService {
   static transporter = nodemailer.createTransport({
@@ -21,10 +23,12 @@ export class MailService {
         subject,
         text,
       });
-      return { success: true };
+      return true;
     } catch (err) {
-      console.log("error sending an email there ", err);
-      return { success: false, error: errReturn(err, "Error sending email ") };
+      throw new InternalServerError(
+        "Error Sending Email",
+        "MAIL_SERVICE_ERROR"
+      );
     }
   }
 }

@@ -1,6 +1,8 @@
 import { Twilio } from "twilio";
-import dotenv from "dotenv"
-dotenv.config()
+import dotenv from "dotenv";
+import { BLRT } from "../../types/types";
+import { InternalServerError } from "../../util/errors";
+dotenv.config();
 export class SMSService {
   static client = new Twilio(
     process.env.TWILLO_SID as string,
@@ -10,14 +12,16 @@ export class SMSService {
   static async sendSms(phoneNumber: string, body: string) {
     try {
       const res = await this.client.messages.create({
-        from:process.env.HOST_SMS_NO,
+        from: process.env.HOST_SMS_NO,
         body,
-        to:phoneNumber,
+        to: phoneNumber,
       });
-      return res 
+      return true;
     } catch (err) {
-      console.log("err sending sms ", err);
-      return null
+      throw new InternalServerError(
+        "SMS service failed to send SMS",
+        "SMS_SERVICE_ERROR"
+      );
     }
   }
 }

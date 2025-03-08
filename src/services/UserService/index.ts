@@ -1,74 +1,67 @@
 import { User } from "@prisma/client";
 import { prisma } from "../DBService/client";
-import { UpdateUser } from "../../types/types";
+import { BLRT, UpdateUser } from "../../types/types";
+import { errReturn, excludeStuff } from "../../util/helper";
+
+export type CreateUserInput = { email?: string; mobileNo?: never } 
+
 export class UserService {
-  static async createUser(user: Pick<User, "email" | "salt" | "userName"|"authProvider">) {
-    try {
-      const newuser = await prisma.user.create({ data: user });
-      return newuser;
-    } catch (err) {
-      console.log("error creating user ", err);
-      return null;
-    }
+
+  static async createUser(identifier:string,type:"email"|"mobileNo") {
+  
+    return await prisma.user.create({
+      data: {email:type==="email"?identifier:"",mobileNo:type==="mobileNo"?identifier:"",userName:""}
+    });
   }
-static  async deleteUser(id: string) {
-    try {
+
+  static async deleteUser(id: string){
+ 
       const newuser = await prisma.user.delete({ where: { id: id } });
-      return newuser;
-    } catch (err) {
-      console.log("error deleting  user ", err);
-      return null;
-    }
+      return true
+    
   }
 
   static async getUser(id: string) {
-    try {
+   
       const newuser = await prisma.user.findUnique({
         where: { id: id },
+        select: excludeStuff(prisma.user.fields, ["salt"]),
       });
-      return newuser;
-    } catch (err) {
-      console.log("error getting user profile  user ", err);
-      return null;
-    }
+      return { success: true, data: newuser };
+   
   }
 
-  static async updateUser(id: string, user: UpdateUser) {
-    try {
+  static async updateUserProfile(id: string, user: UpdateUser) {
+  
       const newuser = await prisma.user.update({
         where: { id: id },
+        select: excludeStuff(prisma.user.fields, ["salt"]),
         data: user,
       });
-      return newuser;
-    } catch (err) {
-      console.log("error updating  user ", err);
-      return null;
-    }
+      return  newuser
+   
   }
 
-  static async updateEmail(id: string, email: string) {
-    try {
+  static async updateEmail(id: string, email: string){
+    
       const user = await prisma.user.update({
         where: { id: id },
+        select: excludeStuff(prisma.user.fields, ["salt"]),
         data: { email: email },
       });
-      return user;
-    } catch (err) {
-      console.log("error updating  email ", err);
-      return null;
-    }
+      return user
+    
+    
   }
-  static async updatePhoneNo(id: string, number: string) {
-    try {
-      
+  static async updatePhoneNo(id: string, number: string){
+    
       const user = await prisma.user.update({
         where: { id: id },
+         select: excludeStuff(prisma.user.fields, ["salt"]),
         data: { mobileNo: number },
       });
-      return user;
-    } catch (err) {
-      console.log("error updating  number  ", err);
-      return null;
+      return user
+    
     }
-  }
+  
 }
