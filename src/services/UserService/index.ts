@@ -2,6 +2,7 @@ import { User } from "@prisma/client";
 import { prisma } from "../DBService/client";
 import { BLRT, UpdateUser } from "../../types/types";
 import { errReturn, excludeStuff } from "../../util/helper";
+import { BadRequestError } from "../../util/errors";
 
 export type CreateUserInput = { email?: string; mobileNo?: never } 
 
@@ -22,21 +23,26 @@ export class UserService {
   }
 
   static async getUser(id: string) {
-   
+    let start=Date.now()
       const newuser = await prisma.user.findUnique({
-        where: { id: id },
-        select: excludeStuff(prisma.user.fields, ["salt"]),
+        where: { id: id }
       });
+      if(!newuser){
+        throw new BadRequestError("user does not exists","USER_DOESNT_EXISTS")
+      }
+      let end=Date.now()
+      console.log("Query time",end-start)
       return { success: true, data: newuser };
    
   }
 
   static async updateUserProfile(id: string, user: UpdateUser) {
-  
+      const u= await this.getUser(id)
+      console.log(u,"user is here ")
       const newuser = await prisma.user.update({
         where: { id: id },
-        select: excludeStuff(prisma.user.fields, ["salt"]),
         data: user,
+        select:{userName:true,profilePhoto:true,gender:true,age:true,mobileNo:true,email:true,intrests:true}
       });
       return  newuser
    
@@ -54,12 +60,13 @@ export class UserService {
     
   }
   static async updatePhoneNo(id: string, number: string){
-    
+
       const user = await prisma.user.update({
         where: { id: id },
          select: excludeStuff(prisma.user.fields, ["salt"]),
         data: { mobileNo: number },
       });
+
       return user
     
     }

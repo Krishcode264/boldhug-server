@@ -20,16 +20,32 @@ import {
 } from "../../util/errors";
 
 export class AuthService {
-
+  static async createAccount() {}
   static async signup(identifier: string) {
-    const optEntry = await getCache<OtpEntry | null>(identifier);
+    const otpEntry = await getCache<OtpEntry | null>(identifier);
     const alreadyExistedUser = await prisma.user.findFirst({
       where: {
         OR: [{ email: identifier }, { mobileNo: identifier }],
       },
+
+      select: {
+        id: true,
+        email: true,
+        mobileNo: true,
+        userName: true,
+        role: true,
+        age: true,
+        gender:true,
+        profilePhoto: {
+          select: {
+            id:true,
+            url: true,
+          },
+        },
+      },
     });
 
-    if (!optEntry || !optEntry.isVarified) {
+    if (!otpEntry || !otpEntry.isVarified) {
       throw new BadRequestError(
         "OPT is not verified try again",
         "OTP_NOT_VERIFIED"
@@ -45,7 +61,11 @@ export class AuthService {
         id: alreadyExistedUser.id,
         role: alreadyExistedUser.role,
       });
-      return { user:{...alreadyExistedUser,isExistingUser:true}, accessToken, refreshToken };
+      return {
+        user: { ...alreadyExistedUser, isExistingUser: true },
+        accessToken,
+        refreshToken,
+      };
     }
 
     const isEmail = z.string().email().safeParse(identifier);
@@ -53,11 +73,6 @@ export class AuthService {
       .number()
       .min(12)
       .safeParse(Number(identifier.split("+")[1]));
-    console.log(
-      isEmail,
-      isPhoneNumber,
-      "at the zod schema for email phone number "
-    );
 
     const newuser = await UserService.createUser(
       identifier,
@@ -82,7 +97,7 @@ export class AuthService {
   static async login(identifier: string) {
     const isVerified = await getCache<OtpEntry>(identifier);
 
-    if (!isVerified||!isVerified?.isVarified) {
+    if (!isVerified || !isVerified?.isVarified) {
       throw new BadRequestError(
         "OTP need to be varified first",
         "OTP_VERIFICATION_NEEDED"
@@ -90,7 +105,7 @@ export class AuthService {
     }
 
     const user = await prisma.user.findFirst({
-      where: { OR:[{mobileNo: identifier},{ email: identifier}]  },
+      where: { OR: [{ mobileNo: identifier }, { email: identifier }] },
     });
 
     if (!user) {
@@ -107,7 +122,7 @@ export class AuthService {
       id: user.id,
       role: user.role,
     });
-    return {user,refreshToken,accessToken};
+    return { user, refreshToken, accessToken };
   }
 
   static async generateOTP(
@@ -117,7 +132,7 @@ export class AuthService {
     const otp = await getCache<OtpEntry>(identifier);
 
     if (!otp) {
-      const OTP = Math.floor(Math.random() * 1000000); //6 digit
+      const OTP = Math.floor(100000 + Math.random() * 900000); //6 digit
       await redis.set(
         identifier,
         JSON.stringify({ otp: OTP, isVerified: false }),
@@ -137,7 +152,7 @@ export class AuthService {
     if (provider === "email") {
       await MailService.sendEmail(
         identifier,
-        `your password for Auth is ${latestOtp.otp}`,
+        `your One time password is  ${latestOtp.otp}`,
         `Your one time password is ${latestOtp.otp} , it will be valid for 5 min  😊😘 `
       );
       return true;
@@ -149,10 +164,6 @@ export class AuthService {
       );
       return true;
     }
-    throw new ConflictError(
-      "auth provider doesnt match",
-      "AUTHPROVIDER_MISMATCH"
-    );
   }
 
   static async verifyOtp(otp: number, identifier: string) {
@@ -218,7 +229,14 @@ export class AuthService {
   }
 
   static verifyJwtToken(token: string) {
-    const payload = jwt.verify(token, process.env.JWT_SECRET as string);
-    return payload;
+    try {
+      const payload = jwt.verify(token, process.env.JWT_SECRET as string);
+      return payload;
+    } catch (err) {
+      throw new AutherizationError(
+        " you token has expired need login",
+        "TOKEN_EXPIRED"
+      );
+    }
   }
 }

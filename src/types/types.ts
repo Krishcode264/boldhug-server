@@ -1,6 +1,6 @@
 import { User } from "@prisma/client";
 
-export type UpdateUser = Pick<User, "userName" >;
+export type UpdateUser = Pick<User, "userName" |"age"|"gender">;
 
 export type OtpEntry = {
   otp: number;

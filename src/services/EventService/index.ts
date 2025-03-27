@@ -1,5 +1,7 @@
+import { Event } from "@prisma/client";
 import { errReturn } from "../../util/helper";
 import { prisma } from "../DBService/client";
+import { EventType } from "../../util/zod";
 
 export class EventService {
 
@@ -39,13 +41,10 @@ export class EventService {
     }
   }
 
-  static async createEvent(id:string) {
-    const event=await prisma.event.findUnique({where:{id:id}})
-    try {
-        return {success:true,data:event}
-    } catch (err) {
-      return { success: false, error: errReturn(err, "error with ") };
-    }
+  static async createEvent(e:EventType) {
+    const event=await prisma.event.create({data:{...e},select:{id:true}})
+
+     return event
   }
 
   static async requestEventParticipation(id:string) {

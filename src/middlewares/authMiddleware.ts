@@ -8,15 +8,18 @@ export function authMiddleware(
   res: Response,
   next: NextFunction
 ): void {
-  const token = req.headers.authorization?.split(",")[1];
+  const token = req.headers.authorization?.split(" ")[1];
   if (token) {
-    console.log("token",token)
+   
     try {
       const verified = AuthService.verifyJwtToken(token);
+    //  console.log("verifield",verified)
       req.body.user = verified;
       next();
     } catch (err) {
       next(err);
     }
+  }else{
+    throw new AutherizationError(" you token has expired need login","UNAUTHERISED")
   }
 }

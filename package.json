@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "src/app.ts",
   "scripts": {
-    "dev": " npm run prestart && nodemon ",
+    "dev": " yarn run prestart && nodemon ",
     "prestart": "npx kill-port 8080",
     "tsc": "tsc",
     "prod": "tsc && node build/app.js",
@@ -14,7 +14,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0",
+    "@aws-sdk/credential-providers": "^3.768.0",
+    "@aws-sdk/s3-request-presigner": "^3.758.0",
     "@prisma/client": "^6.4.1",
+    "@types/node": "^22.13.10",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

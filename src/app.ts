@@ -1,4 +1,4 @@
-import express, { json } from "express";
+import express, { json, NextFunction, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { prisma } from "./services/DBService/client";
@@ -6,11 +6,12 @@ import { MailService } from "./services/MailService";
 import { SMSService } from "./services/SMSService";
 import { AuthService } from "./services/AuthService";
 import { excludeStuff } from "./util/helper";
-import { authRouter } from "./routers/authRouter";
-import { userRouter } from "./routers/userRouter";
-import { eventRouter } from "./routers/eventRouter";
+import { authRouter } from "./api/auth";
+import { userRouter } from "./api/user";
+import { eventRouter } from "./api/event";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { errorHandler } from "./middlewares/errorHandler";
+import { mediaRouter } from "./api/media";
 
 dotenv.config();
 const app = express();
@@ -20,16 +21,18 @@ app.use(cors({ origin: [process.env.CLIENT_MOBILE_URL as string] }));
 
 app.get("/", async (req, res) => {
   console.log("getting  req");
-  await AuthService.generateOTP("krishnazade99@gmail.com", "email");
-  await AuthService.generateOTP("+919552386818", "phoneNumber");
-  res.send("hey you are here ");
+
+  res.send("hey you are here   ");
 });
+// app.post("/yt",async(req:Request,res:Response)=>{
+// return res.send("gey")
+// })
 
 app.use("/auth", authRouter);
 app.use("/user", authMiddleware, userRouter);
-app.use("/event", eventRouter);
-
-app.use(errorHandler);
+app.use("/event",authMiddleware, eventRouter);
+app.use("/media",authMiddleware,mediaRouter)
+ app.use(errorHandler);
 app.listen(8080, () => {
-  console.log("server started here on 8080 ");
+  console.log("server started here on 8080 8080");
 });

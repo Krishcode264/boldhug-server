@@ -1,11 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -34,7 +35,8 @@ enum AttachmentMediaType {
 
 enum ParentType {
   message
-  event_post
+  post
+  event
   profile_photo
 }
 
@@ -52,21 +54,24 @@ enum WhoCanMessage {
 
 model User {
   id               String             @id @default(uuid()) @db.Uuid
-  userName         String?
+  userName         String?            @unique
+  age              Int?
+  gender           String?
   email            String?            @unique
+  intrests         String[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   role             UserRole           @default(user)
   mobileNo         String?            @unique
   profilePhoto     Attachment?        @relation(fields: [profilePhotoId], references: [id])
-  profilePhotoId   String?            @unique @db.Uuid
+  profilePhotoId   String?            @unique @db.Uuid  // Explicit foreign key
   Event            Event[]
   EventAdmin       EventAdmin[]
   ConvoParticipant ConvoParticipant[]
   Setting          Setting?
   EventParticipant EventParticipant[]
-  Message Message[]
-  Comment Comment[]
+  Message          Message[]
+  Comment          Comment[]
 }
 
 model Event {
@@ -76,10 +81,10 @@ model Event {
   description   String
   slots         Int
   reservedSlots Int?
-  location      String?
+  location      String
   coords        String?
   date          DateTime
-  eventTime     DateTime
+  time          String
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   creator       User               @relation(fields: [createdBy], references: [id])
@@ -88,11 +93,12 @@ model Event {
   eventPosts    EventPost[]
   convo         Convo?             @relation(fields: [convoId], references: [id])
   convoId       String?            @unique @db.Uuid
-}
+  attachments Attachment[] 
+ }
 
 model EventAdmin {
   eventId String @db.Uuid
-  userId  String  @db.Uuid
+  userId  String @db.Uuid
   event   Event  @relation(fields: [eventId], references: [id])
   user    User   @relation(fields: [userId], references: [id])
 
@@ -100,8 +106,8 @@ model EventAdmin {
 }
 
 model EventParticipant {
-  userId          String  @db.Uuid
-  eventId         String   @db.Uuid
+  userId          String        @db.Uuid
+  eventId         String        @db.Uuid
   approveStatus   ApproveStatus
   statusUpdatedAt DateTime      @default(now())
   user            User          @relation(fields: [userId], references: [id])
@@ -127,22 +133,25 @@ model Message {
 }
 
 model Attachment {
-  id         String              @id @default(uuid()) @db.Uuid
-  type       AttachmentMediaType
-  url        String
-  format     String
-  fileSize   BigInt
-  key        String
-  parentType ParentType
-  order      Int
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
-  Message    Message?            @relation(fields: [messageId], references: [id])
-  messageId  String?             @db.Uuid
-  Event      EventPost?          @relation(fields: [eventId], references: [id])
-  eventId    String?             @db.Uuid
-  User       User?               @relation()
-  userId     String?             @unique
+  id          String              @id @default(uuid()) @db.Uuid
+  type        AttachmentMediaType
+  url         String
+  format      String?
+  fileSize    BigInt?
+  key         String
+  parentType  ParentType
+  order       Int?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  expiresAt   DateTime            
+  Message     Message?             @relation(fields: [messageId], references: [id])
+  messageId   String?              @db.Uuid
+  Event       Event?               @relation(fields: [eventId], references: [id])
+  eventId     String?              @db.Uuid
+  EventPost   EventPost?           @relation(fields: [eventPostId], references: [id])
+  eventPostId String?              @db.Uuid
+  User        User?                
+  userId      String?              @unique  // User profile photo reference
 }
 
 model EventPost {
@@ -153,14 +162,17 @@ model EventPost {
   likes      Int          @default(0)
   comments   Comment[]
   Event      Event?       @relation(fields: [eventId], references: [id])
-  eventId    String?    @db.Uuid
-  attachment Attachment[]
+  eventId    String?      @db.Uuid
+  attachment Attachment[]  
+
+
+  
 }
 
 model Comment {
   id          String    @id @default(uuid()) @db.Uuid
   content     String
-  eventPostId String   @db.Uuid
+  eventPostId String    @db.Uuid
   createdAt   DateTime  @default(now())
   userId      String    @db.Uuid
   eventPost   EventPost @relation(fields: [eventPostId], references: [id])

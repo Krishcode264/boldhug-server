@@ -1,0 +1,31 @@
+services:
+  server:
+    build: .
+    volumes:
+      - ./src:/app/src
+      - ./node_modules:/app/node_modules
+      - ./.env:/app/.env
+      - ./package.json:/app/package.json
+      - ./nodemon.json:/app/nodemon.json
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    networks:
+      - app_network
+    command: yarn nodemon
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
